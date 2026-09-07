@@ -4,6 +4,7 @@
 #include "../backend/assembly.h"
 #include "../midend/ir.h"
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,19 @@ class PrettyPrinters {
     printIRProgram(const IR::Program &irProgram,
                    const std::vector<std::unique_ptr<IR::StaticVariable>>
                        &irStaticVariables);
+
+    /**
+     * Emit the assembly program to the given output stream.
+     *
+     * This is the unified implementation of assembly formatting: the compiler
+     * driver emits to an assembly file stream, while `printAssemblyProgram`
+     * emits to stdout.
+     *
+     * @param assemblyProgram The assembly program to emit.
+     * @param out The output stream to emit to.
+     */
+    static void emitAssemblyProgram(const Assembly::Program &assemblyProgram,
+                                    std::ostream &out);
 
     /**
      * Print the assembly program to stdout.
@@ -151,157 +165,186 @@ class PrettyPrinters {
         const IR::FunctionCallInstruction &functionCallInstruction);
 
     /**
-     * Print an assembly function definition to stdout.
+     * Emit the assembly code for a function definition.
      *
-     * @param functionDefinition The assembly function definition to print.
+     * @param functionDefinition The function definition to emit.
+     * @param out The output stream to emit to.
      */
-    static void printAssyFunctionDefinition(
-        const Assembly::FunctionDefinition &functionDefinition);
+    static void emitAssyFunctionDefinition(
+        const Assembly::FunctionDefinition &functionDefinition,
+        std::ostream &out);
 
     /**
-     * Print an assembly static variable to stdout.
+     * Emit the assembly code for a static variable.
      *
-     * @param staticVariable The assembly static variable to print.
+     * @param staticVariable The static variable to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyStaticVariable(const Assembly::StaticVariable &staticVariable);
+    emitAssyStaticVariable(const Assembly::StaticVariable &staticVariable,
+                           std::ostream &out);
 
     /**
-     * Print an assembly instruction to stdout.
+     * Emit the assembly code for an instruction.
      *
-     * @param instruction The assembly instruction to print.
+     * @param instruction The instruction to emit.
+     * @param out The output stream to emit to.
      */
-    static void printAssyInstruction(const Assembly::Instruction &instruction);
+    static void emitAssyInstruction(const Assembly::Instruction &instruction,
+                                    std::ostream &out);
 
     /**
-     * Print an assembly move instruction to stdout.
+     * Emit the assembly code for a move instruction.
      *
-     * @param movInstruction The assembly move instruction to print.
-     */
-    static void
-    printAssyMovInstruction(const Assembly::MovInstruction &movInstruction);
-
-    /**
-     * Print an assembly move-with-sign-extend instruction to stdout.
-     *
-     * @param movsxInstruction The assembly move-with-sign-extend instruction to
-     * print.
-     */
-    static void printAssyMovsxInstruction(
-        const Assembly::MovsxInstruction &movsxInstruction);
-
-    /**
-     * Print an assembly return instruction to stdout.
-     *
-     * @param retInstruction The assembly return instruction to print.
+     * @param movInstruction The move instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyRetInstruction(const Assembly::RetInstruction &retInstruction);
+    emitAssyMovInstruction(const Assembly::MovInstruction &movInstruction,
+                           std::ostream &out);
 
     /**
-     * Print an assembly push instruction to stdout.
+     * Emit the assembly code for a move-with-sign-extend instruction.
      *
-     * @param pushInstruction The assembly push instruction to print.
+     * @param movsxInstruction The move-with-sign-extend instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyPushInstruction(const Assembly::PushInstruction &pushInstruction);
+    emitAssyMovsxInstruction(const Assembly::MovsxInstruction &movsxInstruction,
+                             std::ostream &out);
 
     /**
-     * Print an assembly call instruction to stdout.
+     * Emit the assembly code for a return instruction.
      *
-     * @param callInstruction The assembly call instruction to print.
+     * @param out The output stream to emit to.
+     */
+    static void emitAssyRetInstruction(std::ostream &out);
+
+    /**
+     * Emit the assembly code for a push instruction.
+     *
+     * @param pushInstruction The push instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyCallInstruction(const Assembly::CallInstruction &callInstruction);
+    emitAssyPushInstruction(const Assembly::PushInstruction &pushInstruction,
+                            std::ostream &out);
 
     /**
-     * Print an assembly unary instruction to stdout.
+     * Emit the assembly code for a call instruction.
      *
-     * @param unaryInstruction The assembly unary instruction to print.
-     */
-    static void printAssyUnaryInstruction(
-        const Assembly::UnaryInstruction &unaryInstruction);
-
-    /**
-     * Print an assembly binary instruction to stdout.
-     *
-     * @param binaryInstruction The assembly binary instruction to print.
-     */
-    static void printAssyBinaryInstruction(
-        const Assembly::BinaryInstruction &binaryInstruction);
-
-    /**
-     * Print an assembly compare instruction to stdout.
-     *
-     * @param cmpInstruction The assembly compare instruction to print.
+     * @param callInstruction The call instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyCmpInstruction(const Assembly::CmpInstruction &cmpInstruction);
+    emitAssyCallInstruction(const Assembly::CallInstruction &callInstruction,
+                            std::ostream &out);
 
     /**
-     * Print an assembly signed-integer-division instruction to stdout.
+     * Emit the assembly code for a unary instruction.
      *
-     * @param idivInstruction The assembly signed-integer-division instruction
-     * to print.
+     * @param unaryInstruction The unary instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyIdivInstruction(const Assembly::IdivInstruction &idivInstruction);
+    emitAssyUnaryInstruction(const Assembly::UnaryInstruction &unaryInstruction,
+                             std::ostream &out);
 
     /**
-     * Print an assembly divide instruction to stdout.
+     * Emit the assembly code for a binary instruction.
      *
-     * @param divInstruction The assembly divide instruction to print.
+     * @param binaryInstruction The binary instruction to emit.
+     * @param out The output stream to emit to.
+     */
+    static void emitAssyBinaryInstruction(
+        const Assembly::BinaryInstruction &binaryInstruction,
+        std::ostream &out);
+
+    /**
+     * Emit the assembly code for a compare instruction.
+     *
+     * @param cmpInstruction The compare instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyDivInstruction(const Assembly::DivInstruction &divInstruction);
+    emitAssyCmpInstruction(const Assembly::CmpInstruction &cmpInstruction,
+                           std::ostream &out);
 
     /**
-     * Print an assembly covert-doubleword-to-quadword instruction to stdout.
+     * Emit the assembly code for a signed-integer-division instruction.
      *
-     * @param cdqInstruction The assembly covert-doubleword-to-quadword
-     * instruction to print.
+     * @param idivInstruction The signed-integer-division instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyCdqInstruction(const Assembly::CdqInstruction &cdqInstruction);
+    emitAssyIdivInstruction(const Assembly::IdivInstruction &idivInstruction,
+                            std::ostream &out);
 
     /**
-     * Print an assembly jump instruction to stdout.
+     * Emit the assembly code for an unsigned-integer-division instruction.
      *
-     * @param jmpInstruction The assembly jump instruction to print.
+     * @param divInstruction The unsigned-integer-division instruction to emit.
+     * @param out The output stream to emit to.
      */
     static void
-    printAssyJmpInstruction(const Assembly::JmpInstruction &jmpInstruction);
+    emitAssyDivInstruction(const Assembly::DivInstruction &divInstruction,
+                           std::ostream &out);
 
     /**
-     * Print an assembly conditional-jump instruction to stdout.
+     * Emit the assembly code for a covert-doubleword-to-quadword instruction.
      *
-     * @param jmpCCInstruction The assembly conditional-jump instruction to
-     * print.
+     * @param cdqInstruction The covert-doubleword-to-quadword instruction to
+     * emit.
+     * @param out The output stream to emit to.
      */
-    static void printAssyJmpCCInstruction(
-        const Assembly::JmpCCInstruction &jmpCCInstruction);
+    static void
+    emitAssyCdqInstruction(const Assembly::CdqInstruction &cdqInstruction,
+                           std::ostream &out);
 
     /**
-     * Print an assembly set-on-condition instruction to stdout.
+     * Emit the assembly code for a jump instruction.
      *
-     * @param setCCInstruction The assembly set-on-condition instruction to
-     * print.
+     * @param jmpInstruction The jump instruction to emit.
+     * @param out The output stream to emit to.
      */
-    static void printAssySetCCInstruction(
-        const Assembly::SetCCInstruction &setCCInstruction);
+    static void
+    emitAssyJmpInstruction(const Assembly::JmpInstruction &jmpInstruction,
+                           std::ostream &out);
 
     /**
-     * Print an assembly label instruction to stdout.
+     * Emit the assembly code for a conditional jump instruction.
      *
-     * @param labelInstruction The assembly label instruction to print.
+     * @param jmpCCInstruction The conditional jump instruction to emit.
+     * @param out The output stream to emit to.
      */
-    static void printAssyLabelInstruction(
-        const Assembly::LabelInstruction &labelInstruction);
+    static void
+    emitAssyJmpCCInstruction(const Assembly::JmpCCInstruction &jmpCCInstruction,
+                             std::ostream &out);
+
+    /**
+     * Emit the assembly code for a set-byte-on-condition instruction.
+     *
+     * @param setCCInstruction The set-byte-on-condition instruction to emit.
+     * @param out The output stream to emit to.
+     */
+    static void
+    emitAssySetCCInstruction(const Assembly::SetCCInstruction &setCCInstruction,
+                             std::ostream &out);
+
+    /**
+     * Emit the assembly code for a label instruction.
+     *
+     * @param labelInstruction The label instruction to emit.
+     * @param out The output stream to emit to.
+     */
+    static void
+    emitAssyLabelInstruction(const Assembly::LabelInstruction &labelInstruction,
+                             std::ostream &out);
 
     /**
      * Prepend an underscore to the identifier if the underlying OS is macOS.
      *
-     * @param identifier The identifier to potentially modify.
+     * @param identifier The identifier to modify.
      */
     static void prependUnderscoreToIdentifierIfMacOS(
         [[maybe_unused]] std::string &identifier);

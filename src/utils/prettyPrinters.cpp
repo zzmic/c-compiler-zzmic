@@ -7,6 +7,7 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -854,20 +855,18 @@ void PrettyPrinters::printIRFunctionCallInstruction(
  */
 
 /*
- * Start: Functions to print the assembly program to stdout.
+ * Start: Functions to emit the assembly program to an output stream.
  */
-void PrettyPrinters::printAssemblyProgram(
-    const Assembly::Program &assemblyProgram) {
-    const auto &topLevels = assemblyProgram.getTopLevels();
-
-    for (const auto &topLevel : topLevels) {
+void PrettyPrinters::emitAssemblyProgram(
+    const Assembly::Program &assemblyProgram, std::ostream &out) {
+    for (const auto &topLevel : assemblyProgram.getTopLevels()) {
         if (auto *functionDefinition =
                 dynamic_cast<Assembly::FunctionDefinition *>(topLevel.get())) {
-            printAssyFunctionDefinition(*functionDefinition);
+            emitAssyFunctionDefinition(*functionDefinition, out);
         }
         else if (auto *staticVariable =
                      dynamic_cast<Assembly::StaticVariable *>(topLevel.get())) {
-            printAssyStaticVariable(*staticVariable);
+            emitAssyStaticVariable(*staticVariable, out);
         }
     }
 
@@ -875,13 +874,18 @@ void PrettyPrinters::printAssemblyProgram(
 // security hardening measure: it indicates that the code does not require an
 // executable stack.
 #ifdef __linux__
-    std::cout << ".section .note.GNU-stack,\"\",@progbits\n";
+    out << ".section .note.GNU-stack,\"\",@progbits\n";
 #endif
 }
 
-void PrettyPrinters::printAssyFunctionDefinition(
-    const Assembly::FunctionDefinition &functionDefinition) {
-    std::string functionName = functionDefinition.getFunctionIdentifier();
+void PrettyPrinters::printAssemblyProgram(
+    const Assembly::Program &assemblyProgram) {
+    emitAssemblyProgram(assemblyProgram, std::cout);
+}
+
+void PrettyPrinters::emitAssyFunctionDefinition(
+    const Assembly::FunctionDefinition &functionDefinition, std::ostream &out) {
+    auto functionName = functionDefinition.getFunctionIdentifier();
     prependUnderscoreToIdentifierIfMacOS(functionName);
     auto isGlobal = functionDefinition.isGlobal();
     auto globalDirective = "    .globl " + functionName + "\n";
@@ -889,20 +893,20 @@ void PrettyPrinters::printAssyFunctionDefinition(
         globalDirective = "";
     }
 
-    // Print the function prologue (before printing the function body).
-    std::cout << "\n" << globalDirective;
-    std::cout << "    .text\n";
-    std::cout << functionName << ":\n";
-    std::cout << "    pushq %rbp\n";
-    std::cout << "    movq %rsp, %rbp\n";
+    // Emit the function prologue (before emitting the function body).
+    out << "\n" << globalDirective;
+    out << "    .text\n";
+    out << functionName << ":\n";
+    out << "    pushq %rbp\n";
+    out << "    movq %rsp, %rbp\n";
 
     for (const auto &instruction : functionDefinition.getFunctionBody()) {
-        printAssyInstruction(*instruction);
+        emitAssyInstruction(*instruction, out);
     }
 }
 
-void PrettyPrinters::printAssyStaticVariable(
-    const Assembly::StaticVariable &staticVariable) {
+void PrettyPrinters::emitAssyStaticVariable(
+    const Assembly::StaticVariable &staticVariable, std::ostream &out) {
     auto alignment = staticVariable.getAlignment();
     auto alignmentInStr = std::to_string(alignment);
     auto alignDirective = ".align " + alignmentInStr;
@@ -921,155 +925,152 @@ void PrettyPrinters::printAssyStaticVariable(
         globalDirective = "";
     }
 
-    const auto *staticInit = staticVariable.getStaticInit();
     bool isZeroInit = false;
+    const auto *staticInit = staticVariable.getStaticInit();
     if (const auto *intInit = dynamic_cast<const AST::IntInit *>(staticInit)) {
-        isZeroInit = std::get<int>(intInit->getValue()) == 0;
+        isZeroInit = (std::get<int>(intInit->getValue()) == 0);
     }
     else if (const auto *longInit =
                  dynamic_cast<const AST::LongInit *>(staticInit)) {
-        isZeroInit = std::get<long>(longInit->getValue()) == 0L;
+        isZeroInit = (std::get<long>(longInit->getValue()) == 0L);
     }
     else if (const auto *uintInit =
                  dynamic_cast<const AST::UIntInit *>(staticInit)) {
-        isZeroInit = std::get<unsigned int>(uintInit->getValue()) == 0U;
+        isZeroInit = (std::get<unsigned int>(uintInit->getValue()) == 0U);
     }
     else if (const auto *ulongInit =
                  dynamic_cast<const AST::ULongInit *>(staticInit)) {
-        isZeroInit = std::get<unsigned long>(ulongInit->getValue()) == 0UL;
+        isZeroInit = (std::get<unsigned long>(ulongInit->getValue()) == 0UL);
     }
     else {
         throw std::logic_error(
             "Unsupported static init type while printing assembly static "
-            "variable in printAssyStaticVariable");
+            "variable in emitAssyStaticVariable");
     }
 
-    std::cout << "\n";
+    out << "\n";
     if (!isZeroInit) {
-        std::cout << globalDirective;
-        std::cout << "    .data\n";
-        std::cout << "    " << alignDirective << "\n";
-        std::cout << variableIdentifier << ":\n";
+        out << globalDirective;
+        out << "    .data\n";
+        out << "    " << alignDirective << "\n";
+        out << variableIdentifier << ":\n";
         if (const auto *intInit =
                 dynamic_cast<const AST::IntInit *>(staticInit)) {
-            std::cout << "    .long " << std::get<int>(intInit->getValue())
-                      << "\n";
+            out << "    .long " << std::get<int>(intInit->getValue()) << "\n";
         }
         else if (const auto *longInit =
                      dynamic_cast<const AST::LongInit *>(staticInit)) {
-            std::cout << "    .quad " << std::get<long>(longInit->getValue())
-                      << "\n";
+            out << "    .quad " << std::get<long>(longInit->getValue()) << "\n";
         }
         else if (const auto *uintInit =
                      dynamic_cast<const AST::UIntInit *>(staticInit)) {
-            std::cout << "    .long "
-                      << std::get<unsigned int>(uintInit->getValue()) << "\n";
+            out << "    .long " << std::get<unsigned int>(uintInit->getValue())
+                << "\n";
         }
         else if (const auto *ulongInit =
                      dynamic_cast<const AST::ULongInit *>(staticInit)) {
-            std::cout << "    .quad "
-                      << std::get<unsigned long>(ulongInit->getValue()) << "\n";
+            out << "    .quad "
+                << std::get<unsigned long>(ulongInit->getValue()) << "\n";
         }
     }
     else if (isZeroInit) {
-        std::cout << globalDirective;
-        std::cout << "    .bss\n";
-        std::cout << "    " << alignDirective << "\n";
-        std::cout << variableIdentifier << ":\n";
+        out << globalDirective;
+        out << "    .bss\n";
+        out << "    " << alignDirective << "\n";
+        out << variableIdentifier << ":\n";
         if ((dynamic_cast<const AST::IntInit *>(staticInit) != nullptr) ||
             (dynamic_cast<const AST::UIntInit *>(staticInit) != nullptr)) {
-            std::cout << "    .zero 4\n";
+            out << "    .zero 4\n";
         }
         else if ((dynamic_cast<const AST::LongInit *>(staticInit) != nullptr) ||
                  (dynamic_cast<const AST::ULongInit *>(staticInit) !=
                   nullptr)) {
-            std::cout << "    .zero 8\n";
+            out << "    .zero 8\n";
         }
     }
 }
 
-void PrettyPrinters::printAssyInstruction(
-    const Assembly::Instruction &instruction) {
+void PrettyPrinters::emitAssyInstruction(
+    const Assembly::Instruction &instruction, std::ostream &out) {
     if (const auto *movInstruction =
             dynamic_cast<const Assembly::MovInstruction *>(&instruction)) {
-        printAssyMovInstruction(*movInstruction);
+        emitAssyMovInstruction(*movInstruction, out);
     }
-    else if (const auto *movsxInstruction =
-                 dynamic_cast<const Assembly::MovsxInstruction *>(
-                     &instruction)) {
-        printAssyMovsxInstruction(*movsxInstruction);
-    }
-    else if (const auto *retInstruction =
-                 dynamic_cast<const Assembly::RetInstruction *>(&instruction)) {
-        printAssyRetInstruction(*retInstruction);
+    else if (dynamic_cast<const Assembly::RetInstruction *>(&instruction) !=
+             nullptr) {
+        emitAssyRetInstruction(out);
     }
     else if (const auto *pushInstruction =
                  dynamic_cast<const Assembly::PushInstruction *>(
                      &instruction)) {
-        printAssyPushInstruction(*pushInstruction);
+        emitAssyPushInstruction(*pushInstruction, out);
     }
     else if (const auto *callInstruction =
                  dynamic_cast<const Assembly::CallInstruction *>(
                      &instruction)) {
-        printAssyCallInstruction(*callInstruction);
+        emitAssyCallInstruction(*callInstruction, out);
     }
     else if (const auto *unaryInstruction =
                  dynamic_cast<const Assembly::UnaryInstruction *>(
                      &instruction)) {
-        printAssyUnaryInstruction(*unaryInstruction);
+        emitAssyUnaryInstruction(*unaryInstruction, out);
     }
     else if (const auto *binaryInstruction =
                  dynamic_cast<const Assembly::BinaryInstruction *>(
                      &instruction)) {
-        printAssyBinaryInstruction(*binaryInstruction);
+        emitAssyBinaryInstruction(*binaryInstruction, out);
     }
     else if (const auto *cmpInstruction =
                  dynamic_cast<const Assembly::CmpInstruction *>(&instruction)) {
-        printAssyCmpInstruction(*cmpInstruction);
+        emitAssyCmpInstruction(*cmpInstruction, out);
     }
     else if (const auto *idivInstruction =
                  dynamic_cast<const Assembly::IdivInstruction *>(
                      &instruction)) {
-        printAssyIdivInstruction(*idivInstruction);
+        emitAssyIdivInstruction(*idivInstruction, out);
     }
     else if (const auto *divInstruction =
                  dynamic_cast<const Assembly::DivInstruction *>(&instruction)) {
-        printAssyDivInstruction(*divInstruction);
+        emitAssyDivInstruction(*divInstruction, out);
+    }
+    else if (const auto *movsxInstruction =
+                 dynamic_cast<const Assembly::MovsxInstruction *>(
+                     &instruction)) {
+        emitAssyMovsxInstruction(*movsxInstruction, out);
     }
     else if (const auto *cdqInstruction =
                  dynamic_cast<const Assembly::CdqInstruction *>(&instruction)) {
-        printAssyCdqInstruction(*cdqInstruction);
+        emitAssyCdqInstruction(*cdqInstruction, out);
     }
     else if (const auto *jmpInstruction =
                  dynamic_cast<const Assembly::JmpInstruction *>(&instruction)) {
-        printAssyJmpInstruction(*jmpInstruction);
+        emitAssyJmpInstruction(*jmpInstruction, out);
     }
     else if (const auto *jmpCCInstruction =
                  dynamic_cast<const Assembly::JmpCCInstruction *>(
                      &instruction)) {
-        printAssyJmpCCInstruction(*jmpCCInstruction);
+        emitAssyJmpCCInstruction(*jmpCCInstruction, out);
     }
     else if (const auto *setCCInstruction =
                  dynamic_cast<const Assembly::SetCCInstruction *>(
                      &instruction)) {
-        printAssySetCCInstruction(*setCCInstruction);
+        emitAssySetCCInstruction(*setCCInstruction, out);
     }
     else if (const auto *labelInstruction =
                  dynamic_cast<const Assembly::LabelInstruction *>(
                      &instruction)) {
-        printAssyLabelInstruction(*labelInstruction);
+        emitAssyLabelInstruction(*labelInstruction, out);
     }
     else {
         const auto &r = *&instruction;
-        throw std::logic_error(
-            "Unsupported instruction type while printing assembly instruction "
-            "in printAssyInstruction: " +
-            std::string(typeid(r).name()));
+        throw std::logic_error("Unsupported instruction type while printing "
+                               "assembly instruction in emitAssyInstruction: " +
+                               std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyMovInstruction(
-    const Assembly::MovInstruction &movInstruction) {
+void PrettyPrinters::emitAssyMovInstruction(
+    const Assembly::MovInstruction &movInstruction, std::ostream &out) {
     const auto *type = movInstruction.getType();
 
     std::string instructionName;
@@ -1083,10 +1084,8 @@ void PrettyPrinters::printAssyMovInstruction(
         registerSize = QUADWORD_SIZE;
     }
     else {
-        const auto &r = *type;
         throw std::logic_error("Unsupported type while printing assembly mov "
-                               "instruction in printAssyMovInstruction: " +
-                               std::string(typeid(r).name()));
+                               "instruction in emitAssyMovInstruction");
     }
 
     const auto *src = movInstruction.getSrc();
@@ -1114,8 +1113,8 @@ void PrettyPrinters::printAssyMovInstruction(
     else {
         const auto &r = *src;
         throw std::logic_error(
-            "Unsupported source operand type while printing assembly mov "
-            "instruction in printAssyMovInstruction: " +
+            "Unsupported source type while printing assembly mov instruction "
+            "in emitAssyMovInstruction: " +
             std::string(typeid(r).name()));
     }
 
@@ -1139,17 +1138,16 @@ void PrettyPrinters::printAssyMovInstruction(
     else {
         const auto &r = *dst;
         throw std::logic_error(
-            "Unsupported destination operand type while printing assembly mov "
-            "instruction in printAssyMovInstruction: " +
+            "Unsupported destination type while printing assembly mov "
+            "instruction in emitAssyMovInstruction: " +
             std::string(typeid(r).name()));
     }
 
-    std::cout << "    " << instructionName << " " << srcStr << ", " << dstStr
-              << "\n";
+    out << "    " << instructionName << " " << srcStr << ", " << dstStr << "\n";
 }
 
-void PrettyPrinters::printAssyMovsxInstruction(
-    const Assembly::MovsxInstruction &movsxInstruction) {
+void PrettyPrinters::emitAssyMovsxInstruction(
+    const Assembly::MovsxInstruction &movsxInstruction, std::ostream &out) {
     const auto *src = movsxInstruction.getSrc();
     std::string srcStr;
     if (const auto *srcReg =
@@ -1175,7 +1173,7 @@ void PrettyPrinters::printAssyMovsxInstruction(
     else {
         throw std::logic_error(
             "Unsupported source type while printing assembly movsx instruction "
-            "in printAssyMovsxInstruction");
+            "in emitAssyMovsxInstruction");
     }
 
     const auto *dst = movsxInstruction.getDst();
@@ -1197,68 +1195,68 @@ void PrettyPrinters::printAssyMovsxInstruction(
     }
     else {
         throw std::logic_error(
-            "Unsupported destination operand type while printing assembly "
-            "movsx instruction in printAssyMovsxInstruction");
+            "Unsupported destination type while printing assembly movsx "
+            "instruction in emitAssyMovsxInstruction");
     }
 
-    std::cout << "    movslq " << srcStr << ", " << dstStr << "\n";
+    out << "    movslq " << srcStr << ", " << dstStr << "\n";
 }
 
-void PrettyPrinters::printAssyRetInstruction(
-    [[maybe_unused]] const Assembly::RetInstruction &retInstruction) {
-    // Print the function epilogue before printing the return
+void PrettyPrinters::emitAssyRetInstruction(std::ostream &out) {
+    // Emit the function epilogue before emitting the return
     // instruction.
-    std::cout << "    movq %rbp, %rsp\n";
-    std::cout << "    popq %rbp\n";
-    std::cout << "    ret\n";
+    out << "    movq %rbp, %rsp\n";
+    out << "    popq %rbp\n";
+    out << "    ret\n";
 }
 
-void PrettyPrinters::printAssyPushInstruction(
-    const Assembly::PushInstruction &pushInstruction) {
+void PrettyPrinters::emitAssyPushInstruction(
+    const Assembly::PushInstruction &pushInstruction, std::ostream &out) {
     const auto *operand = pushInstruction.getOperand();
+
     if (const auto *stackOperand =
             dynamic_cast<const Assembly::StackOperand *>(operand)) {
-        std::cout << "    pushq" << " " << stackOperand->getOffset() << "("
-                  << stackOperand->getReservedRegisterInStr() << ")\n";
+        out << "    pushq " << stackOperand->getOffset() << "("
+            << stackOperand->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *regOperand =
                  dynamic_cast<const Assembly::RegisterOperand *>(operand)) {
-        std::cout << "    pushq" << " "
-                  << regOperand->getRegisterInBytesInStr(QUADWORD_SIZE) << "\n";
+        out << "    pushq "
+            << regOperand->getRegisterInBytesInStr(QUADWORD_SIZE) << "\n";
     }
     else if (const auto *immOperand =
                  dynamic_cast<const Assembly::ImmediateOperand *>(operand)) {
-        std::cout << "    pushq" << " $"
-                  << static_cast<long>(immOperand->getImmediate()) << "\n";
+        out << "    pushq $" << static_cast<long>(immOperand->getImmediate())
+            << "\n";
     }
     else if (const auto *dataOperand =
                  dynamic_cast<const Assembly::DataOperand *>(operand)) {
         auto identifier = dataOperand->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << "    pushq" << " " << identifier << "(%rip)\n";
+        out << "    pushq " << identifier << "(%rip)\n";
     }
     else {
         throw std::logic_error(
             "Unsupported operand type while printing assembly push instruction "
-            "in printAssyPushInstruction");
+            "in emitAssyPushInstruction");
     }
 }
 
-void PrettyPrinters::printAssyCallInstruction(
-    const Assembly::CallInstruction &callInstruction) {
-    std::string functionName = callInstruction.getFunctionIdentifier();
+void PrettyPrinters::emitAssyCallInstruction(
+    const Assembly::CallInstruction &callInstruction, std::ostream &out) {
+    auto functionName = callInstruction.getFunctionIdentifier();
     prependUnderscoreToIdentifierIfMacOS(functionName);
-    std::cout << "    call " << functionName;
+    out << "    call " << functionName;
 // If the underlying OS is Linux, add the `@PLT` suffix (PLT modifier) to the
 // operand.
 #ifdef __linux__
-    std::cout << "@PLT";
+    out << "@PLT";
 #endif
-    std::cout << "\n";
+    out << "\n";
 }
 
-void PrettyPrinters::printAssyUnaryInstruction(
-    const Assembly::UnaryInstruction &unaryInstruction) {
+void PrettyPrinters::emitAssyUnaryInstruction(
+    const Assembly::UnaryInstruction &unaryInstruction, std::ostream &out) {
     const auto *unaryOperator = unaryInstruction.getUnaryOperator();
     const auto *type = unaryInstruction.getType();
 
@@ -1267,16 +1265,16 @@ void PrettyPrinters::printAssyUnaryInstruction(
         nullptr) {
         instructionName = "neg";
     }
-    else if ((dynamic_cast<const Assembly::ComplementOperator *>(
-                  unaryOperator) != nullptr) ||
-             (dynamic_cast<const Assembly::NotOperator *>(unaryOperator) !=
+    else if (((dynamic_cast<const Assembly::ComplementOperator *>(
+                  unaryOperator)) != nullptr) ||
+             ((dynamic_cast<const Assembly::NotOperator *>(unaryOperator)) !=
               nullptr)) {
         instructionName = "not";
     }
     else {
         throw std::logic_error(
             "Unsupported unary operator while printing assembly unary "
-            "instruction in printAssyUnaryInstruction");
+            "instruction in emitAssyUnaryInstruction");
     }
 
     std::string typeSuffix;
@@ -1291,39 +1289,38 @@ void PrettyPrinters::printAssyUnaryInstruction(
     }
     else {
         throw std::logic_error("Unsupported type while printing assembly unary "
-                               "instruction in printAssyUnaryInstruction");
+                               "instruction in emitAssyUnaryInstruction");
     }
 
-    std::cout << "    " << instructionName << typeSuffix;
+    out << "    " << instructionName << typeSuffix;
 
     const auto *operand = unaryInstruction.getOperand();
     if (const auto *regOperand =
             dynamic_cast<const Assembly::RegisterOperand *>(operand)) {
-        std::cout << " " << regOperand->getRegisterInBytesInStr(registerSize)
-                  << "\n";
+        out << " " << regOperand->getRegisterInBytesInStr(registerSize) << "\n";
     }
     else if (const auto *stackOperand =
                  dynamic_cast<const Assembly::StackOperand *>(operand)) {
-        std::cout << " " << stackOperand->getOffset() << "("
-                  << stackOperand->getReservedRegisterInStr() << ")\n";
+        out << " " << stackOperand->getOffset() << "("
+            << stackOperand->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *dataOperand =
                  dynamic_cast<const Assembly::DataOperand *>(operand)) {
         auto identifier = dataOperand->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
     }
     else {
         const auto &r = *operand;
         throw std::logic_error(
             "Unsupported operand type while printing assembly unary "
-            "instruction in printAssyUnaryInstruction: " +
+            "instruction in emitAssyUnaryInstruction: " +
             std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyBinaryInstruction(
-    const Assembly::BinaryInstruction &binaryInstruction) {
+void PrettyPrinters::emitAssyBinaryInstruction(
+    const Assembly::BinaryInstruction &binaryInstruction, std::ostream &out) {
     const auto *binaryOperator = binaryInstruction.getBinaryOperator();
     const auto *type = binaryInstruction.getType();
 
@@ -1341,9 +1338,8 @@ void PrettyPrinters::printAssyBinaryInstruction(
         instructionName = "imul";
     }
     else {
-        throw std::logic_error(
-            "Unsupported binary operator while printing assembly binary "
-            "instruction in printAssyBinaryInstruction");
+        throw std::logic_error("Unsupported binary operator while printing "
+                               "assembly binary instruction");
     }
 
     std::string typeSuffix;
@@ -1359,62 +1355,67 @@ void PrettyPrinters::printAssyBinaryInstruction(
     else {
         throw std::logic_error(
             "Unsupported type while printing assembly binary instruction in "
-            "printAssyBinaryInstruction");
+            "emitAssyBinaryInstruction");
     }
 
-    std::cout << "    " << instructionName << typeSuffix;
+    out << "    " << instructionName << typeSuffix;
 
     const auto *operand1 = binaryInstruction.getOperand1();
     if (const auto *operand1Imm =
             dynamic_cast<const Assembly::ImmediateOperand *>(operand1)) {
-        std::cout << " $" << static_cast<long>(operand1Imm->getImmediate())
-                  << ",";
+        out << " $" << static_cast<long>(operand1Imm->getImmediate()) << ",";
     }
     else if (const auto *operand1Reg =
                  dynamic_cast<const Assembly::RegisterOperand *>(operand1)) {
-        std::cout << " " << operand1Reg->getRegisterInBytesInStr(registerSize)
-                  << ",";
+        out << " " << operand1Reg->getRegisterInBytesInStr(registerSize) << ",";
     }
     else if (const auto *operand1Stack =
                  dynamic_cast<const Assembly::StackOperand *>(operand1)) {
-        std::cout << " " << operand1Stack->getOffset() << "("
-                  << operand1Stack->getReservedRegisterInStr() << "),";
+        out << " " << operand1Stack->getOffset() << "("
+            << operand1Stack->getReservedRegisterInStr() << "),";
     }
     else if (const auto *operand1Data =
                  dynamic_cast<const Assembly::DataOperand *>(operand1)) {
         auto identifier = operand1Data->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip),";
+        out << " " << identifier << "(%rip),";
+    }
+    else {
+        const auto &r = *operand1;
+        throw std::logic_error(
+            "Unsupported operand type while printing assembly binary "
+            "instruction in emitAssyBinaryInstruction: " +
+            std::string(typeid(r).name()));
     }
 
     const auto *operand2 = binaryInstruction.getOperand2();
     if (const auto *operand2Reg =
             dynamic_cast<const Assembly::RegisterOperand *>(operand2)) {
-        std::cout << " " << operand2Reg->getRegisterInBytesInStr(registerSize)
-                  << "\n";
+        out << " " << operand2Reg->getRegisterInBytesInStr(registerSize)
+            << "\n";
     }
     else if (const auto *operand2Stack =
                  dynamic_cast<const Assembly::StackOperand *>(operand2)) {
-        std::cout << " " << operand2Stack->getOffset() << "("
-                  << operand2Stack->getReservedRegisterInStr() << ")\n";
+        out << " " << operand2Stack->getOffset() << "("
+            << operand2Stack->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *operand2Data =
                  dynamic_cast<const Assembly::DataOperand *>(operand2)) {
         auto identifier = operand2Data->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
     }
     else {
         const auto &r = *operand2;
         throw std::logic_error(
             "Unsupported operand type while printing assembly binary "
-            "instruction in printAssyBinaryInstruction: " +
+            "instruction in emitAssyBinaryInstruction: " +
             std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyCmpInstruction(
-    const Assembly::CmpInstruction &cmpInstruction) {
+void PrettyPrinters::emitAssyCmpInstruction(
+    const Assembly::CmpInstruction &cmpInstruction, std::ostream &out) {
     const auto *type = cmpInstruction.getType();
 
     std::string typeSuffix;
@@ -1429,55 +1430,69 @@ void PrettyPrinters::printAssyCmpInstruction(
     }
     else {
         throw std::logic_error("Unsupported type while printing assembly cmp "
-                               "instruction in printAssyCmpInstruction");
+                               "instruction in emitAssyCmpInstruction");
     }
 
-    std::cout << "    cmp" << typeSuffix;
+    out << "    cmp" << typeSuffix;
 
     const auto *operand1 = cmpInstruction.getOperand1();
     if (const auto *operand1Imm =
             dynamic_cast<const Assembly::ImmediateOperand *>(operand1)) {
-        std::cout << " $" << static_cast<long>(operand1Imm->getImmediate());
+        out << " $" << static_cast<long>(operand1Imm->getImmediate());
     }
     else if (const auto *operand1Reg =
                  dynamic_cast<const Assembly::RegisterOperand *>(operand1)) {
-        std::cout << " " << operand1Reg->getRegisterInBytesInStr(registerSize);
+        out << " " << operand1Reg->getRegisterInBytesInStr(registerSize);
     }
     else if (const auto *operand1Stack =
                  dynamic_cast<const Assembly::StackOperand *>(operand1)) {
-        std::cout << " " << operand1Stack->getOffset() << "("
-                  << operand1Stack->getReservedRegisterInStr() << ")";
+        out << " " << operand1Stack->getOffset() << "("
+            << operand1Stack->getReservedRegisterInStr() << ")";
     }
     else if (const auto *operand1Data =
                  dynamic_cast<const Assembly::DataOperand *>(operand1)) {
         auto identifier = operand1Data->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)";
+        out << " " << identifier << "(%rip)";
+    }
+    else {
+        const auto &r = *operand1;
+        throw std::logic_error(
+            "Unsupported operand type while printing assembly cmp instruction "
+            "in emitAssyCmpInstruction: " +
+            std::string(typeid(r).name()));
     }
 
-    std::cout << ",";
+    out << ",";
 
     const auto *operand2 = cmpInstruction.getOperand2();
     if (const auto *operand2Reg =
             dynamic_cast<const Assembly::RegisterOperand *>(operand2)) {
-        std::cout << " " << operand2Reg->getRegisterInBytesInStr(registerSize)
-                  << "\n";
+        out << " " << operand2Reg->getRegisterInBytesInStr(registerSize)
+            << "\n";
     }
     else if (const auto *operand2Stack =
                  dynamic_cast<const Assembly::StackOperand *>(operand2)) {
-        std::cout << " " << operand2Stack->getOffset() << "("
-                  << operand2Stack->getReservedRegisterInStr() << ")\n";
+        out << " " << operand2Stack->getOffset() << "("
+            << operand2Stack->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *operand2Data =
                  dynamic_cast<const Assembly::DataOperand *>(operand2)) {
         auto identifier = operand2Data->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
+    }
+    else {
+        const auto &r = *operand2;
+        throw std::logic_error(
+            "Unsupported operand type while printing assembly cmp instruction "
+            "in emitAssyCmpInstruction: " +
+            std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyIdivInstruction(
-    const Assembly::IdivInstruction &idivInstruction) {
+void PrettyPrinters::emitAssyIdivInstruction(
+    const Assembly::IdivInstruction &idivInstruction, std::ostream &out) {
     const auto *type = idivInstruction.getType();
 
     std::string typeSuffix;
@@ -1492,39 +1507,38 @@ void PrettyPrinters::printAssyIdivInstruction(
     }
     else {
         throw std::logic_error("Unsupported type while printing assembly idiv "
-                               "instruction in printAssyIdivInstruction");
+                               "instruction in emitAssyIdivInstruction");
     }
 
-    std::cout << "    idiv" << typeSuffix;
+    out << "    idiv" << typeSuffix;
 
     const auto *operand = idivInstruction.getOperand();
     if (const auto *regOperand =
             dynamic_cast<const Assembly::RegisterOperand *>(operand)) {
-        std::cout << " " << regOperand->getRegisterInBytesInStr(registerSize)
-                  << "\n";
+        out << " " << regOperand->getRegisterInBytesInStr(registerSize) << "\n";
     }
     else if (const auto *stackOperand =
                  dynamic_cast<const Assembly::StackOperand *>(operand)) {
-        std::cout << " " << stackOperand->getOffset() << "("
-                  << stackOperand->getReservedRegisterInStr() << ")\n";
+        out << " " << stackOperand->getOffset() << "("
+            << stackOperand->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *dataOperand =
                  dynamic_cast<const Assembly::DataOperand *>(operand)) {
         auto identifier = dataOperand->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
     }
     else {
         const auto &r = *operand;
         throw std::logic_error(
             "Unsupported operand type while printing assembly idiv instruction "
-            "in printAssyIdivInstruction: " +
+            "in emitAssyIdivInstruction: " +
             std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyDivInstruction(
-    const Assembly::DivInstruction &divInstruction) {
+void PrettyPrinters::emitAssyDivInstruction(
+    const Assembly::DivInstruction &divInstruction, std::ostream &out) {
     const auto *type = divInstruction.getType();
 
     std::string typeSuffix;
@@ -1539,170 +1553,169 @@ void PrettyPrinters::printAssyDivInstruction(
     }
     else {
         throw std::logic_error("Unsupported type while printing assembly div "
-                               "instruction in printAssyDivInstruction");
+                               "instruction in emitAssyDivInstruction");
     }
 
-    std::cout << "    div" << typeSuffix;
+    out << "    div" << typeSuffix;
 
     const auto *operand = divInstruction.getOperand();
     if (const auto *regOperand =
             dynamic_cast<const Assembly::RegisterOperand *>(operand)) {
-        std::cout << " " << regOperand->getRegisterInBytesInStr(registerSize)
-                  << "\n";
+        out << " " << regOperand->getRegisterInBytesInStr(registerSize) << "\n";
     }
     else if (const auto *stackOperand =
                  dynamic_cast<const Assembly::StackOperand *>(operand)) {
-        std::cout << " " << stackOperand->getOffset() << "("
-                  << stackOperand->getReservedRegisterInStr() << ")\n";
+        out << " " << stackOperand->getOffset() << "("
+            << stackOperand->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *dataOperand =
                  dynamic_cast<const Assembly::DataOperand *>(operand)) {
         auto identifier = dataOperand->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
     }
     else {
         const auto &r = *operand;
         throw std::logic_error(
             "Unsupported operand type while printing assembly div instruction "
-            "in printAssyDivInstruction: " +
+            "in emitAssyDivInstruction: " +
             std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyCdqInstruction(
-    const Assembly::CdqInstruction &cdqInstruction) {
+void PrettyPrinters::emitAssyCdqInstruction(
+    const Assembly::CdqInstruction &cdqInstruction, std::ostream &out) {
     const auto *type = cdqInstruction.getType();
 
     if (dynamic_cast<const Assembly::Longword *>(type) != nullptr) {
-        std::cout << "    cdq\n";
+        out << "    cdq\n";
     }
     else if (dynamic_cast<const Assembly::Quadword *>(type) != nullptr) {
-        std::cout << "    cqo\n";
+        out << "    cqo\n";
     }
     else {
         throw std::logic_error("Unsupported type while printing assembly cdq "
-                               "instruction in printAssyCdqInstruction");
+                               "instruction in emitAssyCdqInstruction");
     }
 }
 
-void PrettyPrinters::printAssyJmpInstruction(
-    const Assembly::JmpInstruction &jmpInstruction) {
+void PrettyPrinters::emitAssyJmpInstruction(
+    const Assembly::JmpInstruction &jmpInstruction, std::ostream &out) {
     auto label = jmpInstruction.getLabel();
-    std::cout << "    jmp .L" << label << "\n";
+    out << "    jmp .L" << label << "\n";
 }
 
-void PrettyPrinters::printAssyJmpCCInstruction(
-    const Assembly::JmpCCInstruction &jmpCCInstruction) {
+void PrettyPrinters::emitAssyJmpCCInstruction(
+    const Assembly::JmpCCInstruction &jmpCCInstruction, std::ostream &out) {
     const auto *condCode = jmpCCInstruction.getCondCode();
     if (dynamic_cast<const Assembly::E *>(condCode) != nullptr) {
-        std::cout << "    je";
+        out << "    je";
     }
     else if (dynamic_cast<const Assembly::NE *>(condCode) != nullptr) {
-        std::cout << "    jne";
+        out << "    jne";
     }
     else if (dynamic_cast<const Assembly::G *>(condCode) != nullptr) {
-        std::cout << "    jg";
+        out << "    jg";
     }
     else if (dynamic_cast<const Assembly::GE *>(condCode) != nullptr) {
-        std::cout << "    jge";
+        out << "    jge";
     }
     else if (dynamic_cast<const Assembly::L *>(condCode) != nullptr) {
-        std::cout << "    jl";
+        out << "    jl";
     }
     else if (dynamic_cast<const Assembly::LE *>(condCode) != nullptr) {
-        std::cout << "    jle";
+        out << "    jle";
     }
     else if (dynamic_cast<const Assembly::A *>(condCode) != nullptr) {
-        std::cout << "    ja";
+        out << "    ja";
     }
     else if (dynamic_cast<const Assembly::AE *>(condCode) != nullptr) {
-        std::cout << "    jae";
+        out << "    jae";
     }
     else if (dynamic_cast<const Assembly::B *>(condCode) != nullptr) {
-        std::cout << "    jb";
+        out << "    jb";
     }
     else if (dynamic_cast<const Assembly::BE *>(condCode) != nullptr) {
-        std::cout << "    jbe";
+        out << "    jbe";
     }
     else {
         throw std::logic_error(
-            "Unsupported conditional code while printing "
-            "assembly jmpcc instruction in printAssyJmpCCInstruction");
+            "Unsupported conditional code while printing assembly jmpcc "
+            "instruction in emitAssyJmpCCInstruction");
     }
 
     auto label = jmpCCInstruction.getLabel();
-    std::cout << " .L" << label << "\n";
+    out << " .L" << label << "\n";
 }
 
-void PrettyPrinters::printAssySetCCInstruction(
-    const Assembly::SetCCInstruction &setCCInstruction) {
+void PrettyPrinters::emitAssySetCCInstruction(
+    const Assembly::SetCCInstruction &setCCInstruction, std::ostream &out) {
     const auto *condCode = setCCInstruction.getCondCode();
     if (dynamic_cast<const Assembly::E *>(condCode) != nullptr) {
-        std::cout << "    sete";
+        out << "    sete";
     }
     else if (dynamic_cast<const Assembly::NE *>(condCode) != nullptr) {
-        std::cout << "    setne";
+        out << "    setne";
     }
     else if (dynamic_cast<const Assembly::G *>(condCode) != nullptr) {
-        std::cout << "    setg";
+        out << "    setg";
     }
     else if (dynamic_cast<const Assembly::GE *>(condCode) != nullptr) {
-        std::cout << "    setge";
+        out << "    setge";
     }
     else if (dynamic_cast<const Assembly::L *>(condCode) != nullptr) {
-        std::cout << "    setl";
+        out << "    setl";
     }
     else if (dynamic_cast<const Assembly::LE *>(condCode) != nullptr) {
-        std::cout << "    setle";
+        out << "    setle";
     }
     else if (dynamic_cast<const Assembly::A *>(condCode) != nullptr) {
-        std::cout << "    seta";
+        out << "    seta";
     }
     else if (dynamic_cast<const Assembly::AE *>(condCode) != nullptr) {
-        std::cout << "    setae";
+        out << "    setae";
     }
     else if (dynamic_cast<const Assembly::B *>(condCode) != nullptr) {
-        std::cout << "    setb";
+        out << "    setb";
     }
     else if (dynamic_cast<const Assembly::BE *>(condCode) != nullptr) {
-        std::cout << "    setbe";
+        out << "    setbe";
     }
     else {
         throw std::logic_error(
-            "Unsupported conditional code while printing "
-            "assembly setcc instruction in printAssySetCCInstruction");
+            "Unsupported conditional code while printing assembly setcc "
+            "instruction in emitAssySetCCInstruction");
     }
 
     const auto *operand = setCCInstruction.getOperand();
     if (const auto *regOperand =
             dynamic_cast<const Assembly::RegisterOperand *>(operand)) {
-        std::cout << " " << regOperand->getRegisterInBytesInStr(1) << "\n";
+        out << " " << regOperand->getRegisterInBytesInStr(1) << "\n";
     }
     else if (const auto *stackOperand =
                  dynamic_cast<const Assembly::StackOperand *>(operand)) {
-        std::cout << " " << stackOperand->getOffset() << "("
-                  << stackOperand->getReservedRegisterInStr() << ")\n";
+        out << " " << stackOperand->getOffset() << "("
+            << stackOperand->getReservedRegisterInStr() << ")\n";
     }
     else if (const auto *dataOperand =
                  dynamic_cast<const Assembly::DataOperand *>(operand)) {
         auto identifier = dataOperand->getIdentifier();
         prependUnderscoreToIdentifierIfMacOS(identifier);
-        std::cout << " " << identifier << "(%rip)\n";
+        out << " " << identifier << "(%rip)\n";
     }
     else {
         const auto &r = *operand;
         throw std::logic_error(
             "Unsupported operand type while printing assembly setcc "
-            "instruction in printAssySetCCInstruction: " +
+            "instruction in emitAssySetCCInstruction: " +
             std::string(typeid(r).name()));
     }
 }
 
-void PrettyPrinters::printAssyLabelInstruction(
-    const Assembly::LabelInstruction &labelInstruction) {
+void PrettyPrinters::emitAssyLabelInstruction(
+    const Assembly::LabelInstruction &labelInstruction, std::ostream &out) {
     auto label = labelInstruction.getLabel();
-    std::cout << ".L" << label << ":\n";
+    out << ".L" << label << ":\n";
 }
 
 void PrettyPrinters::prependUnderscoreToIdentifierIfMacOS(
@@ -1714,5 +1727,5 @@ void PrettyPrinters::prependUnderscoreToIdentifierIfMacOS(
 #endif
 }
 /*
- * End: Functions to print the assembly program to stdout.
+ * End: Functions to emit the assembly program to an output stream.
  */
